@@ -1,5 +1,6 @@
 import os
 import aiohttp
+import pprint
 
 from aiohttp import web
 
@@ -8,16 +9,22 @@ from gidgethub import aiohttp as gh_aiohttp
 
 router = routing.Router()
 
-#@router.register("issues", action="opened")
-#async def issue_opened_event(event, gh, *args, **kwargs):
-#    """
-#    Whenever an issue is opened, greet the author and say thanks.
-#    """
-#    url = event.data["issue"]["comments_url"]
-#    author = event.data["issue"]["user"]["login"]
-#
-#    message = f"Thanks for the report @{author}! I will look into it ASAP! (I'm a bot)."
-#    await gh.post(url, data={"body": message})
+@router.register("pull_request", action="opened")
+async def pr_opened_event(event, gh, *args, **kwargs):
+    """
+    Whenever an issue is opened, greet the author and say thanks.
+    """
+    patch_url = event.data["pull_request"]["patch_url"]
+    author = event.data["pull_request"]["user"]["login"]
+    print('PR opened by ' + author)
+    print('PR patch at ' + patch_url)
+
+    patch = await gh.getitem(patch_url)
+
+    print(patch)
+
+    filenames = map(lambda s : s[6:], filter(lambda s: s.startswith('+++ b/') or s.startswith('--- a/'), patch.splitlines()))
+    print(list(filenames))
 
 
 async def main(request):
@@ -29,6 +36,7 @@ async def main(request):
     gh_user = os.environ.get("GH_USER")
     oauth_token = os.environ.get("GH_AUTH")
 
+    print("A request!")
     # a representation of GitHub webhook event
     event = sansio.Event.from_http(request.headers, body, secret=secret)
 
@@ -37,7 +45,6 @@ async def main(request):
         gh = gh_aiohttp.GitHubAPI(session, gh_user,
                                   oauth_token=oauth_token)
 
-        print(event)
         # call the appropriate callback for the event
         await router.dispatch(event, gh)
 
@@ -47,7 +54,7 @@ async def main(request):
 
 if __name__ == "__main__":
     app = web.Application()
-    app.router.add_get("/", main)
+    app.router.add_post("/", main)
     port = os.environ.get("PORT")
     if port is not None:
         port = int(port)
